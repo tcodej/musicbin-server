@@ -1,0 +1,20 @@
+{
+  "name": "audio-server",
+  "version": "1.0.0",
+  "description": "Serve mp3 files from your personal web server.",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "nodemon server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Trent Johnson",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "fs": "0.0.1-security",
+    "music-metadata": "^8.1.4",
+    "path": "^0.12.7"
+  }
+}
