@@ -1,13 +1,14 @@
 import express from 'express';
+import dotenv from 'dotenv';
 import cors from 'cors';
 import fs from 'fs';
 import { parseFile } from 'music-metadata';
 
 const app = express();
-const port = 3000;
 
-const MP3_PATH = '/mnt/i/Audio/mp3/Music/';
+dotenv.config();
 
+// todo: lock this down
 app.use(cors());
 
 app.get('/', (req, res) => {
@@ -15,12 +16,12 @@ app.get('/', (req, res) => {
 });
 
 // serve static mp3 files
-app.use('/api/mp3', express.static(MP3_PATH));
+app.use('/api/mp3', express.static(process.env.MP3_PATH));
 
 app.get('/api/browse/*', (req, res) => {
 	const formats = ['.mp3', '.m4a'];
 	const path = decodeURIComponent(req.params[0]);
-	const list = fs.readdirSync(MP3_PATH + path);
+	const list = fs.readdirSync(process.env.MP3_PATH + path);
 	let result = {
 		path: req.params[0],
 		folders: [],
@@ -66,7 +67,6 @@ app.get('/api/browse/*', (req, res) => {
 	} else {
 		res.json(result);
 	}
-
 });
 
 // expects a path to an mp3 file
@@ -76,7 +76,7 @@ app.get('/api/meta/*', (req, res) => {
 
 	(async () => {
 		const meta = await getMeta(path);
-		meta.mp3 = `https://${host}/api/mp3/`+ encodeURIComponent(path);
+		meta.mp3 = `${process.env.PROTOCOL}://${host}/api/mp3/`+ encodeURIComponent(path);
 
 		if (meta.status === 'ok') {
 			res.json(meta);
@@ -87,15 +87,14 @@ app.get('/api/meta/*', (req, res) => {
 	})();
 });
 
-app.listen(port, () => {
-	console.log(`Audio Server listening on port ${port}`);
-	console.log(`MP3 path ${MP3_PATH}`);
+app.listen(process.env.PORT, () => {
+	console.log(`Audio Server running ${process.env.PROTOCOL}://localhost:${process.env.PORT}`);
+	console.log(`MP3 path ${process.env.MP3_PATH}`);
 });
-
 
 const getMeta = async (path) => {
 	try {
-		let { common } = await parseFile(MP3_PATH + path);
+		let { common } = await parseFile(process.env.MP3_PATH + path);
 
 		if (common.picture && common.picture[0]) {
 			const picture = common.picture[0];
