@@ -5,7 +5,8 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "nodemon server.js",
+    "dev": "nodemon server.js",
+    "prod": "node server.js & ngrok http --domain=bold-wondrous-midge.ngrok-free.app 3000", 
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Trent Johnson",
