@@ -15,11 +15,13 @@ app.get('/', (req, res) => {
 	res.send('Music Server v1.0');
 });
 
-// serve static mp3 files
+// serve static mp3 files - required
 app.use('/api/mp3', express.static(process.env.MP3_PATH));
 
-// also serve cdg files for yokie
-app.use('/api/cdg', express.static(process.env.CDG_PATH));
+// also serve cdg files for yokie - optional
+if (process.env.CDG_PATH) {
+	app.use('/api/cdg', express.static(process.env.CDG_PATH));
+}
 
 app.get('/api/browse/*', (req, res) => {
 	const formats = ['.mp3', '.m4a'];
