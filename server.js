@@ -18,6 +18,9 @@ app.get('/', (req, res) => {
 // serve static mp3 files
 app.use('/api/mp3', express.static(process.env.MP3_PATH));
 
+// also serve cdg files for yokie
+app.use('/api/cdg', express.static(process.env.CDG_PATH));
+
 app.get('/api/browse/*', (req, res) => {
 	const formats = ['.mp3', '.m4a'];
 	const path = decodeURIComponent(req.params[0]);
