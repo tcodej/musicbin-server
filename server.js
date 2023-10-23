@@ -91,7 +91,7 @@ app.get('/api/meta/*', (req, res) => {
 });
 
 app.listen(process.env.PORT, () => {
-	console.log(`Audio Server running ${process.env.PROTOCOL}://localhost:${process.env.PORT}`);
+	console.log(`Music Server running ${process.env.PROTOCOL}://localhost:${process.env.PORT}`);
 	console.log(`MP3 path ${process.env.MP3_PATH}`);
 });
 
