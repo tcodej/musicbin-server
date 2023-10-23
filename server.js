@@ -12,7 +12,7 @@ dotenv.config();
 app.use(cors());
 
 app.get('/', (req, res) => {
-	res.send('Audio Server v1.0');
+	res.send('Music Server v1.0');
 });
 
 // serve static mp3 files

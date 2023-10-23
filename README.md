@@ -13,6 +13,8 @@ The folder structure that I follow for my mp3 collection is roughly like the fol
 ```
 Artist A
 	+- YYYY - Album 1
+		+- 01 - Song Title 1.mp3
+		+- 02 - Song Title 2.mp3
 	+- YYYY - Album 2
 	+- YYYY - Album 3
 Artist B

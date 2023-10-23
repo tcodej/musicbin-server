@@ -1,5 +1,5 @@
 {
-  "name": "audio-server",
+  "name": "music-server",
   "version": "1.0.0",
   "description": "Serve mp3 files from your personal web server.",
   "main": "server.js",
