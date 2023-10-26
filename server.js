@@ -34,36 +34,35 @@ app.get('/api/browse/*', (req, res) => {
 		unsupported: []
 	}
 
-	list.forEach((item) => {
-		const extension = item.substring(item.length - 4);
+	// (async () => {
+	// 	const result = await getDirectoryListing(path);
+	// 	res.json(result);
+	// })();
 
-		if (extension.lastIndexOf('.') === 0) {
-			if (formats.includes(extension)) {
+	list.forEach((item) => {
+		// const extension = item.substring(item.length - 4);
+
+		// if (extension.lastIndexOf('.') === 0) {
+		if (isFolder(item)) {
+			result.folders.push(item);
+
+		} else {
+			if (isMusicFile(item)) {
 				result.files.push(item);
 
 			} else {
 				result.unsupported.push(item);
 			}
-
-		} else {
-			result.folders.push(item);
 		}
 	});
 
 	// if browsing an album folder, return a subset of metadata based on the first file
 	if (result.files.length > 0) {
 		(async () => {
-			const meta = await getMeta(result.path +'/'+ result.files[0]);
+			const meta = await getMeta(result.path +'/'+ result.files[0], true);
 
 			if (meta.status === 'ok') {
-				const albumMeta = {
-					artist: meta.artist,
-					album: meta.album,
-					year: meta.year,
-					image: meta.image
-				};
-
-				result.meta = albumMeta;
+				result.meta = meta;
 			}
 
 			res.json(result);
@@ -71,6 +70,28 @@ app.get('/api/browse/*', (req, res) => {
 
 	} else {
 		res.json(result);
+	}
+});
+
+// expects a path to an mp3 file
+app.get('/api/meta/folder/*', (req, res) => {
+	const path = decodeURIComponent(req.params[0]);
+	const list = fs.readdirSync(process.env.MP3_PATH + path);
+
+	if (isMusicFile(list[0])) {
+		(async () => {
+			const meta = await getMeta(path +'/'+ list[0], true);
+
+			if (meta.status === 'ok') {
+				res.json(meta);
+
+			} else {
+				res.status(500).json(meta);
+			}
+		})();
+
+	} else {
+		res.json({ message: 'Not a music file', path: path });
 	}
 });
 
@@ -97,7 +118,7 @@ app.listen(process.env.PORT, () => {
 	console.log(`MP3 path ${process.env.MP3_PATH}`);
 });
 
-const getMeta = async (path) => {
+const getMeta = async (path, subset) => {
 	try {
 		let { common } = await parseFile(process.env.MP3_PATH + path);
 
@@ -106,6 +127,17 @@ const getMeta = async (path) => {
 
 			common.image = `data:${picture.format};base64,${picture.data.toString('base64')}`;
 			delete common.picture;
+		}
+
+		if (subset === true) {
+			const albumMeta = {
+				artist: common.artist,
+				album: common.album,
+				year: common.year,
+				image: common.image
+			};
+
+			common = albumMeta;
 		}
 
 		common.status = 'ok';
@@ -119,3 +151,20 @@ const getMeta = async (path) => {
 		};
 	}
 }
+
+const isFolder = (str) => {
+	const extension = str.substring(str.length - 4);
+
+	if (extension.lastIndexOf('.') === 0) {
+		return false;
+	}
+
+	return true;
+};
+
+const isMusicFile = (str) => {
+	const formats = ['.mp3', '.m4a'];
+	const extension = str.substring(str.length - 4);
+
+	return formats.includes(extension);
+};
