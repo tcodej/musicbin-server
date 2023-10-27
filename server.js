@@ -2,14 +2,39 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import fs from 'fs';
+import path from 'path';
+import mcache from 'memory-cache';
 import { parseFile } from 'music-metadata';
 
 const app = express();
+const ttl = 300;	// 5 minutes
 
 dotenv.config();
 
-// todo: lock this down
-app.use(cors());
+const cache = (duration) => {
+	return (req, res, next) => {
+		const key = 'music-server' + req.originalUrl || req.url;
+		const cachedBody = mcache.get(key);
+
+		if (cachedBody) {
+			res.send(cachedBody);
+			return;
+
+		} else {
+			res.sendResponse = res.send;
+			res.send = (body) => {
+				mcache.put(key, body, duration * 1000);
+				res.sendResponse(body);
+			}
+
+			next();
+		}
+	}
+}
+
+app.use(cors({
+	origin: process.env.CORS_ORIGINS.split(',')
+}));
 
 app.get('/', (req, res) => {
 	res.send('Music Server v1.0');
@@ -23,10 +48,10 @@ if (process.env.CDG_PATH) {
 	app.use('/api/cdg', express.static(process.env.CDG_PATH));
 }
 
-app.get('/api/browse/*', (req, res) => {
+app.get('/api/browse/*', cache(ttl), (req, res) => {
 	const formats = ['.mp3', '.m4a'];
-	const path = decodeURIComponent(req.params[0]);
-	const list = fs.readdirSync(process.env.MP3_PATH + path);
+	const pathReq = decodeURIComponent(req.params[0]);
+	const list = fs.readdirSync(process.env.MP3_PATH + pathReq);
 	let result = {
 		path: req.params[0],
 		folders: [],
@@ -34,15 +59,7 @@ app.get('/api/browse/*', (req, res) => {
 		unsupported: []
 	}
 
-	// (async () => {
-	// 	const result = await getDirectoryListing(path);
-	// 	res.json(result);
-	// })();
-
 	list.forEach((item) => {
-		// const extension = item.substring(item.length - 4);
-
-		// if (extension.lastIndexOf('.') === 0) {
 		if (isFolder(item)) {
 			result.folders.push(item);
 
@@ -74,13 +91,13 @@ app.get('/api/browse/*', (req, res) => {
 });
 
 // expects a path to an mp3 file
-app.get('/api/meta/folder/*', (req, res) => {
-	const path = decodeURIComponent(req.params[0]);
-	const list = fs.readdirSync(process.env.MP3_PATH + path);
+app.get('/api/meta/folder/*', cache(ttl), (req, res) => {
+	const pathReq = decodeURIComponent(req.params[0]);
+	const list = fs.readdirSync(process.env.MP3_PATH + pathReq);
 
 	if (isMusicFile(list[0])) {
 		(async () => {
-			const meta = await getMeta(path +'/'+ list[0], true);
+			const meta = await getMeta(pathReq +'/'+ list[0], true);
 
 			if (meta.status === 'ok') {
 				res.json(meta);
@@ -91,18 +108,18 @@ app.get('/api/meta/folder/*', (req, res) => {
 		})();
 
 	} else {
-		res.json({ message: 'Not a music file', path: path });
+		res.json({});
 	}
 });
 
 // expects a path to an mp3 file
-app.get('/api/meta/*', (req, res) => {
-	const path = decodeURIComponent(req.params[0]);
+app.get('/api/meta/*', cache(ttl), (req, res) => {
+	const pathReq = decodeURIComponent(req.params[0]);
 	const host = req.header('Host');
 
 	(async () => {
-		const meta = await getMeta(path);
-		meta.mp3 = `${process.env.PROTOCOL}://${host}/api/mp3/`+ encodeURIComponent(path);
+		const meta = await getMeta(pathReq);
+		meta.mp3 = `${process.env.PROTOCOL}://${host}/api/mp3/`+ encodeURIComponent(pathReq);
 
 		if (meta.status === 'ok') {
 			res.json(meta);
@@ -118,9 +135,9 @@ app.listen(process.env.PORT, () => {
 	console.log(`MP3 path ${process.env.MP3_PATH}`);
 });
 
-const getMeta = async (path, subset) => {
+const getMeta = async (pathReq, subset) => {
 	try {
-		let { common } = await parseFile(process.env.MP3_PATH + path);
+		let { common } = await parseFile(process.env.MP3_PATH + pathReq);
 
 		if (common.picture && common.picture[0]) {
 			const picture = common.picture[0];
@@ -153,18 +170,12 @@ const getMeta = async (path, subset) => {
 }
 
 const isFolder = (str) => {
-	const extension = str.substring(str.length - 4);
-
-	if (extension.lastIndexOf('.') === 0) {
-		return false;
-	}
-
-	return true;
+	return path.extname(str) ? false : true;
 };
 
 const isMusicFile = (str) => {
 	const formats = ['.mp3', '.m4a'];
-	const extension = str.substring(str.length - 4);
+	const extension = path.extname(str)
 
-	return formats.includes(extension);
+	return formats.includes(extension) ? true : false;
 };

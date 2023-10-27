@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon server.js",
-    "prod": "node server.js & ngrok http --domain=bold-wondrous-midge.ngrok-free.app 3000", 
+    "prod": "node server.js & ngrok http --domain=bold-wondrous-midge.ngrok-free.app 3000",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Trent Johnson",
@@ -16,6 +16,7 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "fs": "0.0.1-security",
+    "memory-cache": "^0.2.0",
     "music-metadata": "^8.1.4",
     "path": "^0.12.7"
   }
