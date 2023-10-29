@@ -49,7 +49,6 @@ if (process.env.CDG_PATH) {
 }
 
 app.get('/api/browse/*', cache(ttl), (req, res) => {
-	const formats = ['.mp3', '.m4a'];
 	const pathReq = decodeURIComponent(req.params[0]);
 	const list = fs.readdirSync(process.env.MP3_PATH + pathReq);
 	let result = {
@@ -170,12 +169,12 @@ const getMeta = async (pathReq, subset) => {
 }
 
 const isFolder = (str) => {
-	return path.extname(str) ? false : true;
+	return isMusicFile(str) ? false : true;
 };
 
 const isMusicFile = (str) => {
 	const formats = ['.mp3', '.m4a'];
-	const extension = path.extname(str)
+	const extension = path.extname(str);
 
-	return formats.includes(extension) ? true : false;
+	return extension && formats.includes(extension) ? true : false;
 };
