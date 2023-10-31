@@ -13,7 +13,7 @@ dotenv.config();
 
 const cache = (duration) => {
 	return (req, res, next) => {
-		const key = 'music-server' + req.originalUrl || req.url;
+		const key = 'music-server-' + req.originalUrl || req.url;
 		const cachedBody = mcache.get(key);
 
 		if (cachedBody) {
@@ -48,44 +48,52 @@ if (process.env.CDG_PATH) {
 	app.use('/api/cdg', express.static(process.env.CDG_PATH));
 }
 
-app.get('/api/browse/*', cache(ttl), (req, res) => {
+app.get('/api/browse/*', (req, res) => {
 	const pathReq = decodeURIComponent(req.params[0]);
-	const list = fs.readdirSync(process.env.MP3_PATH + pathReq);
-	let result = {
-		path: req.params[0],
-		folders: [],
-		files: [],
-		unsupported: []
-	}
 
-	list.forEach((item) => {
-		if (isFolder(item)) {
-			result.folders.push(item);
+	try {
+		const list = fs.readdirSync(process.env.MP3_PATH + pathReq);
+		let result = {
+			path: req.params[0],
+			folders: [],
+			files: [],
+			unsupported: []
+		}
 
-		} else {
-			if (isMusicFile(item)) {
-				result.files.push(item);
+		list.forEach((item) => {
+			if (isFolder(item)) {
+				result.folders.push(item);
 
 			} else {
-				result.unsupported.push(item);
+				if (isMusicFile(item)) {
+					result.files.push(item);
+
+				} else {
+					result.unsupported.push(item);
+				}
 			}
-		}
-	});
+		});
 
-	// if browsing an album folder, return a subset of metadata based on the first file
-	if (result.files.length > 0) {
-		(async () => {
-			const meta = await getMeta(result.path +'/'+ result.files[0], true);
+		// if browsing an album folder, return a subset of metadata based on the first file
+		if (result.files.length > 0) {
+			(async () => {
+				const meta = await getMeta(result.path +'/'+ result.files[0], true);
 
-			if (meta.status === 'ok') {
-				result.meta = meta;
-			}
+				if (meta.status === 'ok') {
+					result.meta = meta;
+				}
 
+				res.json(result);
+			})();
+
+		} else {
+			// no files exist
 			res.json(result);
-		})();
+		}
 
-	} else {
-		res.json(result);
+	} catch (err) {
+		console.log('not found:', pathReq);
+		res.status(404).json({ ok: false });
 	}
 });
 
@@ -150,7 +158,8 @@ const getMeta = async (pathReq, subset) => {
 				artist: common.artist,
 				album: common.album,
 				year: common.year,
-				image: common.image
+				image: common.image,
+				genre: common.genre
 			};
 
 			common = albumMeta;
