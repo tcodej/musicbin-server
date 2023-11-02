@@ -11,6 +11,8 @@ const ttl = 300;	// 5 minutes
 
 dotenv.config();
 
+const { MP3_PATH, CDG_PATH, CORS_ORIGINS, PROTOCOL, PORT } = process.env;
+
 const cache = (duration) => {
 	return (req, res, next) => {
 		const key = 'music-server-' + req.originalUrl || req.url;
@@ -33,7 +35,7 @@ const cache = (duration) => {
 }
 
 app.use(cors({
-	origin: process.env.CORS_ORIGINS.split(',')
+	origin: CORS_ORIGINS.split(',')
 }));
 
 app.get('/', (req, res) => {
@@ -41,18 +43,18 @@ app.get('/', (req, res) => {
 });
 
 // serve static mp3 files - required
-app.use('/api/mp3', express.static(process.env.MP3_PATH));
+app.use('/api/mp3', express.static(MP3_PATH));
 
 // also serve cdg files for yokie - optional
-if (process.env.CDG_PATH) {
-	app.use('/api/cdg', express.static(process.env.CDG_PATH));
+if (CDG_PATH) {
+	app.use('/api/cdg', express.static(CDG_PATH));
 }
 
 app.get('/api/browse/*', (req, res) => {
 	const pathReq = decodeURIComponent(req.params[0]);
 
 	try {
-		const list = fs.readdirSync(process.env.MP3_PATH + pathReq);
+		const list = fs.readdirSync(MP3_PATH + pathReq);
 		let result = {
 			path: req.params[0],
 			folders: [],
@@ -61,7 +63,7 @@ app.get('/api/browse/*', (req, res) => {
 		}
 
 		list.forEach((item) => {
-			if (isFolder(item)) {
+			if (isFolder(MP3_PATH + pathReq +'/'+ item)) {
 				result.folders.push(item);
 
 			} else {
@@ -79,7 +81,7 @@ app.get('/api/browse/*', (req, res) => {
 			(async () => {
 				const meta = await getMeta(result.path +'/'+ result.files[0], true);
 
-				if (meta.status === 'ok') {
+				if (meta.ok) {
 					result.meta = meta;
 				}
 
@@ -92,30 +94,45 @@ app.get('/api/browse/*', (req, res) => {
 		}
 
 	} catch (err) {
-		console.log('not found:', pathReq);
-		res.status(404).json({ ok: false });
+		console.log(err);
+		res.status(404).json({ ok: false, error: pathReq +' not found' });
 	}
 });
 
 // expects a path to folder containing at least 1 mp3 file
 app.get('/api/meta/folder/*', cache(ttl), (req, res) => {
 	const pathReq = decodeURIComponent(req.params[0]);
-	const list = fs.readdirSync(process.env.MP3_PATH + pathReq);
 
-	if (isMusicFile(list[0])) {
-		(async () => {
-			const meta = await getMeta(pathReq +'/'+ list[0], true);
+	try {
+		const list = fs.readdirSync(MP3_PATH + pathReq);
+		let found = false;
 
-			if (meta.status === 'ok') {
-				res.json(meta);
+		// look for the first valid music file to grab meta data from
+		for (let i=0; i<list.length; i++) {
+			if (isMusicFile(list[i])) {
+				(async () => {
+					const meta = await getMeta(pathReq +'/'+ list[0], true);
 
-			} else {
-				res.status(500).json(meta);
+					if (meta.ok) {
+						res.json(meta);
+
+					} else {
+						res.status(500).json(meta);
+					}
+				})();
+
+				found = true;
+				break;
 			}
-		})();
+		}
 
-	} else {
-		res.json({});
+		if (found === false) {
+			res.status(500).json({ ok: false, error: 'Folder does not contain a valid music file' });
+		}
+
+	} catch(err) {
+		console.log(err);
+		res.status(500).json({ ok: false, error: err });
 	}
 });
 
@@ -126,9 +143,9 @@ app.get('/api/meta/*', cache(ttl), (req, res) => {
 
 	(async () => {
 		const meta = await getMeta(pathReq);
-		meta.mp3 = `${process.env.PROTOCOL}://${host}/api/mp3/`+ encodeURIComponent(pathReq);
+		meta.mp3 = `${PROTOCOL}://${host}/api/mp3/`+ encodeURIComponent(pathReq);
 
-		if (meta.status === 'ok') {
+		if (meta.ok) {
 			res.json(meta);
 
 		} else {
@@ -137,14 +154,14 @@ app.get('/api/meta/*', cache(ttl), (req, res) => {
 	})();
 });
 
-app.listen(process.env.PORT, () => {
-	console.log(`Music Server running ${process.env.PROTOCOL}://localhost:${process.env.PORT}`);
-	console.log(`MP3 path ${process.env.MP3_PATH}`);
+app.listen(PORT, () => {
+	console.log(`Music Server running at ${PROTOCOL}://localhost:${PORT}`);
+	console.log(`MP3_PATH is ${MP3_PATH}`);
 });
 
 const getMeta = async (pathReq, subset) => {
 	try {
-		let { common } = await parseFile(process.env.MP3_PATH + pathReq);
+		let { common } = await parseFile(MP3_PATH + pathReq);
 
 		if (common.picture && common.picture[0]) {
 			const picture = common.picture[0];
@@ -165,20 +182,23 @@ const getMeta = async (pathReq, subset) => {
 			common = albumMeta;
 		}
 
-		common.status = 'ok';
+		common.ok = true;
 		return common;
 
 	} catch (err) {
 		console.log(err);
 		return {
-			stauts: 'error',
+			ok: false,
 			message: err.message
 		};
 	}
 }
 
-const isFolder = (str) => {
-	return isMusicFile(str) ? false : true;
+// requires a fully qualified path
+const isFolder = (path) => {
+	const stats = fs.lstatSync(path);
+
+	return stats.isDirectory() ? true : false;
 };
 
 const isMusicFile = (str) => {
