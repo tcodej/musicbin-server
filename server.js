@@ -97,7 +97,7 @@ app.get('/api/browse/*', (req, res) => {
 	}
 });
 
-// expects a path to an mp3 file
+// expects a path to folder containing at least 1 mp3 file
 app.get('/api/meta/folder/*', cache(ttl), (req, res) => {
 	const pathReq = decodeURIComponent(req.params[0]);
 	const list = fs.readdirSync(process.env.MP3_PATH + pathReq);
