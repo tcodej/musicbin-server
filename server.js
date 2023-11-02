@@ -95,7 +95,10 @@ app.get('/api/browse/*', (req, res) => {
 
 	} catch (err) {
 		console.log(err);
-		res.status(404).json({ ok: false, error: pathReq +' not found' });
+		res.status(404).json({
+			ok: false,
+			error: err.message
+		});
 	}
 });
 
@@ -111,7 +114,7 @@ app.get('/api/meta/folder/*', cache(ttl), (req, res) => {
 		for (let i=0; i<list.length; i++) {
 			if (isMusicFile(list[i])) {
 				(async () => {
-					const meta = await getMeta(pathReq +'/'+ list[0], true);
+					const meta = await getMeta(pathReq +'/'+ list[i], true);
 
 					if (meta.ok) {
 						res.json(meta);
@@ -127,12 +130,18 @@ app.get('/api/meta/folder/*', cache(ttl), (req, res) => {
 		}
 
 		if (found === false) {
-			res.status(500).json({ ok: false, error: 'Folder does not contain a valid music file' });
+			res.status(500).json({
+				ok: false,
+				error: 'Folder does not contain a valid music file'
+			});
 		}
 
 	} catch(err) {
 		console.log(err);
-		res.status(500).json({ ok: false, error: err });
+		res.status(500).json({
+			ok: false,
+			error: err.message
+		});
 	}
 });
 
@@ -189,7 +198,7 @@ const getMeta = async (pathReq, subset) => {
 		console.log(err);
 		return {
 			ok: false,
-			message: err.message
+			error: err.message
 		};
 	}
 }
