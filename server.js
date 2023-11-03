@@ -7,7 +7,12 @@ import mcache from 'memory-cache';
 import { parseFile } from 'music-metadata';
 
 const app = express();
-const ttl = 300;	// 5 minutes
+
+// 5 minutes
+const ttl = 300;
+
+// use for debugging
+const disableCache = false;
 
 dotenv.config();
 
@@ -15,10 +20,10 @@ const { MP3_PATH, CDG_PATH, CORS_ORIGINS, PROTOCOL, PORT } = process.env;
 
 const cache = (duration) => {
 	return (req, res, next) => {
-		const key = 'music-server-' + req.originalUrl || req.url;
+		const key = 'music-server-'+ req.originalUrl || req.url;
 		const cachedBody = mcache.get(key);
 
-		if (cachedBody) {
+		if (cachedBody && !disableCache) {
 			res.send(cachedBody);
 			return;
 
@@ -130,9 +135,9 @@ app.get('/api/meta/folder/*', cache(ttl), (req, res) => {
 		}
 
 		if (found === false) {
-			res.status(500).json({
+			res.json({
 				ok: false,
-				error: 'Folder does not contain a valid music file'
+				error: 'Folder does not contain a valid music file. No thumbnail available.'
 			});
 		}
 
@@ -188,6 +193,7 @@ const getMeta = async (pathReq, subset) => {
 				genre: common.genre
 			};
 
+			// override the full common object
 			common = albumMeta;
 		}
 
