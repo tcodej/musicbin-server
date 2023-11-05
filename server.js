@@ -12,7 +12,7 @@ const app = express();
 const ttl = 300;
 
 // use for debugging
-const disableCache = false;
+const disableCache = true;
 
 dotenv.config();
 
@@ -114,23 +114,35 @@ app.get('/api/meta/folder/*', cache(ttl), (req, res) => {
 	try {
 		const list = fs.readdirSync(MP3_PATH + pathReq);
 		let found = false;
+		let cover = '';
 
 		// look for the first valid music file to grab meta data from
 		for (let i=0; i<list.length; i++) {
-			if (isMusicFile(list[i])) {
-				(async () => {
-					const meta = await getMeta(pathReq +'/'+ list[i], true);
-
-					if (meta.ok) {
-						res.json(meta);
-
-					} else {
-						res.status(500).json(meta);
-					}
-				})();
-
+			// cover.jpg - only supported folders with no music files
+			if (list[i] === 'cover.jpg') {
+				cover = getURL(req, pathReq +'/'+ list[i]);
+				console.log('custom cover', cover);
 				found = true;
-				break;
+				res.json({
+					image: cover
+				});
+
+			} else {
+				if (isMusicFile(list[i])) {
+					(async () => {
+						const meta = await getMeta(pathReq +'/'+ list[i], true);
+
+						if (meta.ok) {
+							res.json(meta);
+
+						} else {
+							res.status(500).json(meta);
+						}
+					})();
+
+					found = true;
+					break;
+				}
 			}
 		}
 
@@ -153,11 +165,10 @@ app.get('/api/meta/folder/*', cache(ttl), (req, res) => {
 // expects a path to an mp3 file
 app.get('/api/meta/*', cache(ttl), (req, res) => {
 	const pathReq = decodeURIComponent(req.params[0]);
-	const host = req.header('Host');
 
 	(async () => {
 		const meta = await getMeta(pathReq);
-		meta.mp3 = `${PROTOCOL}://${host}/api/mp3/`+ encodeURIComponent(pathReq);
+		meta.mp3 = getURL(req, pathReq);
 
 		if (meta.ok) {
 			res.json(meta);
@@ -172,6 +183,12 @@ app.listen(PORT, () => {
 	console.log(`Music Server running at ${PROTOCOL}://localhost:${PORT}`);
 	console.log(`MP3_PATH is ${MP3_PATH}`);
 });
+
+const getURL = (req, path) => {
+	const host = req.header('Host');
+
+	return `${PROTOCOL}://${host}/api/mp3/`+ encodeURIComponent(path);
+}
 
 const getMeta = async (pathReq, subset) => {
 	try {
