@@ -118,10 +118,9 @@ app.get('/api/meta/folder/*', cache(ttl), (req, res) => {
 
 		// look for the first valid music file to grab meta data from
 		for (let i=0; i<list.length; i++) {
-			// cover.jpg - only supported folders with no music files
-			if (list[i] === 'cover.jpg') {
+			// cover.jpg or folder.jpg - only supported folders with no music files
+			if (['cover.jpg', 'folder.jpg'].includes(list[i])) {
 				cover = getURL(req, pathReq +'/'+ list[i]);
-				console.log('custom cover', cover);
 				found = true;
 				res.json({
 					image: cover
