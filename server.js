@@ -2,7 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import fs from 'fs';
-import path from 'path';
+import p from 'path';
 import mcache from 'memory-cache';
 import { parseFile } from 'music-metadata';
 
@@ -59,7 +59,7 @@ app.get('/api/browse/*', (req, res) => {
 	const pathReq = decodeURIComponent(req.params[0]);
 
 	try {
-		const list = fs.readdirSync(MP3_PATH + pathReq);
+		const list = fs.readdirSync(p.join(MP3_PATH, pathReq));
 		let result = {
 			path: req.params[0],
 			folders: [],
@@ -68,7 +68,7 @@ app.get('/api/browse/*', (req, res) => {
 		}
 
 		list.forEach((item) => {
-			if (isFolder(MP3_PATH + pathReq +'/'+ item)) {
+			if (isFolder(p.join(MP3_PATH, pathReq, item))) {
 				result.folders.push(item);
 
 			} else {
@@ -84,7 +84,7 @@ app.get('/api/browse/*', (req, res) => {
 		// if browsing an album folder, return a subset of metadata based on the first file
 		if (result.files.length > 0) {
 			(async () => {
-				const meta = await getMeta(result.path +'/'+ result.files[0], true);
+				const meta = await getMeta(p.join(result.path, result.files[0]), true);
 
 				if (meta.ok) {
 					result.meta = meta;
@@ -112,7 +112,7 @@ app.get('/api/meta/folder/*', cache(ttl), (req, res) => {
 	const pathReq = decodeURIComponent(req.params[0]);
 
 	try {
-		const list = fs.readdirSync(MP3_PATH + pathReq);
+		const list = fs.readdirSync(p.join(MP3_PATH, pathReq));
 		let found = false;
 		let cover = '';
 
@@ -120,7 +120,7 @@ app.get('/api/meta/folder/*', cache(ttl), (req, res) => {
 		for (let i=0; i<list.length; i++) {
 			// cover.jpg or folder.jpg - only supported folders with no music files
 			if (['cover.jpg', 'folder.jpg'].includes(list[i])) {
-				cover = getURL(req, pathReq +'/'+ list[i]);
+				cover = getURL(req, p.join(pathReq, list[i]));
 				found = true;
 				res.json({
 					image: cover
@@ -129,7 +129,7 @@ app.get('/api/meta/folder/*', cache(ttl), (req, res) => {
 			} else {
 				if (isMusicFile(list[i])) {
 					(async () => {
-						const meta = await getMeta(pathReq +'/'+ list[i], true);
+						const meta = await getMeta(p.join(pathReq, list[i]), true);
 
 						if (meta.ok) {
 							res.json(meta);
@@ -178,10 +178,49 @@ app.get('/api/meta/*', cache(ttl), (req, res) => {
 	})();
 });
 
+// experimental random album picker
+app.get('/api/random/:num', cache(ttl), (req, res) => {
+	const artists = shuffle(fs.readdirSync(MP3_PATH));
+	const result = [];
+
+	(async () => {
+		for await (const artist of artists.slice(0, req.params.num)) {
+			const albumList = shuffle(fs.readdirSync(p.join(MP3_PATH, artist)));
+			const path = p.join(MP3_PATH, artist, albumList[0]);
+
+			if (isFolder(path)) {
+				const fileList = shuffle(fs.readdirSync(path));
+				const meta = await getMeta(p.join(artist, albumList[0], fileList[0]), true);
+
+				if (meta.ok) {
+					meta.path = albumList[0];
+					result.push(meta);
+				}
+
+			} else {
+				// sometimes this won't be a folder, so just skip it
+				// todo: add another item to replace it?
+				console.log(path +' is not a folder');
+			}
+		}
+
+		res.json({ num: req.params.num, result: result });
+	})();
+});
+
 app.listen(PORT, () => {
 	console.log(`Music Server running at ${PROTOCOL}://localhost:${PORT}`);
 	console.log(`MP3_PATH is ${MP3_PATH}`);
 });
+
+const shuffle = (array) => { 
+	for (let i = array.length - 1; i > 0; i--) { 
+		const j = Math.floor(Math.random() * (i + 1)); 
+		[array[i], array[j]] = [array[j], array[i]]; 
+	}
+
+	return array; 
+}
 
 const getURL = (req, path) => {
 	const host = req.header('Host');
@@ -191,7 +230,7 @@ const getURL = (req, path) => {
 
 const getMeta = async (pathReq, subset) => {
 	try {
-		let { common } = await parseFile(MP3_PATH + pathReq);
+		let { common } = await parseFile(p.join(MP3_PATH, pathReq));
 
 		if (common.picture && common.picture[0]) {
 			const picture = common.picture[0];
@@ -234,7 +273,7 @@ const isFolder = (path) => {
 
 const isMusicFile = (str) => {
 	const formats = ['.mp3', '.m4a'];
-	const extension = path.extname(str);
+	const extension = p.extname(str);
 
 	return extension && formats.includes(extension) ? true : false;
 };
