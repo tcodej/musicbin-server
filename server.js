@@ -12,7 +12,7 @@ const app = express();
 const ttl = 300;
 
 // use for debugging
-const disableCache = true;
+const disableCache = false;
 
 dotenv.config();
 
@@ -55,7 +55,7 @@ if (CDG_PATH) {
 	app.use('/api/cdg', express.static(CDG_PATH));
 }
 
-app.get('/api/browse/*', (req, res) => {
+app.get('/api/browse/*', cache(ttl), (req, res) => {
 	const pathReq = decodeURIComponent(req.params[0]);
 
 	try {
@@ -64,7 +64,8 @@ app.get('/api/browse/*', (req, res) => {
 			path: req.params[0],
 			folders: [],
 			files: [],
-			unsupported: []
+			unsupported: [],
+			albums: []
 		}
 
 		list.forEach((item) => {
@@ -82,21 +83,93 @@ app.get('/api/browse/*', (req, res) => {
 		});
 
 		// if browsing an album folder, return a subset of metadata based on the first file
-		if (result.files.length > 0) {
-			(async () => {
+		// if (result.files.length > 0) {
+		// 	(async () => {
+		// 		const meta = await getMeta(p.join(result.path, result.files[0]), true);
+
+		// 		if (meta.ok) {
+		// 			result.meta = meta;
+		// 		}
+
+		// 		// res.json(result);
+		// 	})();
+		// }
+
+		(async () => {
+			// if browsing an album folder, return a subset of metadata based on the first file
+			if (result.files.length > 0) {
 				const meta = await getMeta(p.join(result.path, result.files[0]), true);
 
 				if (meta.ok) {
 					result.meta = meta;
 				}
+			}
 
-				res.json(result);
-			})();
+			// if album folders are found, check for available meta data if music files are inside
+			if (pathReq && result.folders.length > 0) {
+				for await (const album of result.folders) {
+					const fileList = fs.readdirSync(p.join(MP3_PATH, pathReq, album));
+					let found = false;
+					let cover = '';
 
-		} else {
-			// no files exist
+					// console.log('includes?', ['cover.jpg', 'folder.jpg'].some(j => fileList.includes(j)));
+
+					// look for the first valid music file to grab meta data from
+					for (let i=0; i<fileList.length; i++) {
+						// cover.jpg or folder.jpg - only supported folders with no music files
+						if (['cover.jpg', 'folder.jpg'].includes(fileList[i])) {
+							cover = getURL(req, p.join(pathReq, album, fileList[i]));
+							found = true;
+
+							result.albums.push({
+								isFolder: true,
+								artist: pathReq,
+								path: p.join(pathReq, album),
+								image: cover
+							});
+
+						} else {
+							if (isMusicFile(fileList[i])) {
+								const meta = await getMeta(p.join(pathReq, album, fileList[i]), true);
+
+								if (meta.ok) {
+									meta.path = p.join(pathReq, album);
+									result.albums.push(meta);
+								}
+
+								found = true;
+								break;
+							}
+						}
+					}
+
+					// if (found === false) {
+					// 	res.json({
+					// 		ok: false,
+					// 		error: 'Folder does not contain a valid music file. No thumbnail available.'
+					// 	});
+					// }
+
+/*
+					const meta = await getMeta(p.join(pathReq, album, fileList[0]), true);
+
+					if (meta.ok) {
+						meta.path = album;
+						console.log('-----', album)
+						result.albums.push(meta);
+					}
+*/
+					// } else {
+					// 	// sometimes this won't be a folder, so just skip it
+					// 	// todo: add another item to replace it?
+					// 	console.log(path +' is not a folder');
+					// }
+				}
+			}
+
+			// console.log(result);
 			res.json(result);
-		}
+		})();
 
 	} catch (err) {
 		console.log(err);
@@ -179,7 +252,7 @@ app.get('/api/meta/*', cache(ttl), (req, res) => {
 });
 
 // experimental random album picker
-app.get('/api/random/:num', cache(ttl), (req, res) => {
+app.get('/api/random/:num', (req, res) => {
 	const artists = shuffle(fs.readdirSync(MP3_PATH));
 	const result = [];
 
@@ -193,7 +266,7 @@ app.get('/api/random/:num', cache(ttl), (req, res) => {
 				const meta = await getMeta(p.join(artist, albumList[0], fileList[0]), true);
 
 				if (meta.ok) {
-					meta.path = albumList[0];
+					meta.path = p.join(artist, albumList[0]);
 					result.push(meta);
 				}
 
