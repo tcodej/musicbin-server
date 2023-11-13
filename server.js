@@ -47,6 +47,12 @@ app.get('/', (req, res) => {
 	res.send('Music Server v1.0');
 });
 
+// utility endpoint to aid in troubleshooting
+app.get('/api/clearcache', (req, res) => {
+	mcache.clear();
+	res.send('Cache cleared.');
+});
+
 // serve static mp3 files - required
 app.use('/api/mp3', express.static(MP3_PATH));
 
@@ -63,9 +69,9 @@ app.get('/api/browse/*', cache(ttl), (req, res) => {
 		let result = {
 			path: req.params[0],
 			folders: [],
+			albums: [],
 			files: [],
-			unsupported: [],
-			albums: []
+			unsupported: []
 		}
 
 		list.forEach((item) => {
@@ -81,19 +87,6 @@ app.get('/api/browse/*', cache(ttl), (req, res) => {
 				}
 			}
 		});
-
-		// if browsing an album folder, return a subset of metadata based on the first file
-		// if (result.files.length > 0) {
-		// 	(async () => {
-		// 		const meta = await getMeta(p.join(result.path, result.files[0]), true);
-
-		// 		if (meta.ok) {
-		// 			result.meta = meta;
-		// 		}
-
-		// 		// res.json(result);
-		// 	})();
-		// }
 
 		(async () => {
 			// if browsing an album folder, return a subset of metadata based on the first file
@@ -111,8 +104,6 @@ app.get('/api/browse/*', cache(ttl), (req, res) => {
 					const fileList = fs.readdirSync(p.join(MP3_PATH, pathReq, album));
 					let found = false;
 					let cover = '';
-
-					// console.log('includes?', ['cover.jpg', 'folder.jpg'].some(j => fileList.includes(j)));
 
 					// look for the first valid music file to grab meta data from
 					for (let i=0; i<fileList.length; i++) {
@@ -142,28 +133,6 @@ app.get('/api/browse/*', cache(ttl), (req, res) => {
 							}
 						}
 					}
-
-					// if (found === false) {
-					// 	res.json({
-					// 		ok: false,
-					// 		error: 'Folder does not contain a valid music file. No thumbnail available.'
-					// 	});
-					// }
-
-/*
-					const meta = await getMeta(p.join(pathReq, album, fileList[0]), true);
-
-					if (meta.ok) {
-						meta.path = album;
-						console.log('-----', album)
-						result.albums.push(meta);
-					}
-*/
-					// } else {
-					// 	// sometimes this won't be a folder, so just skip it
-					// 	// todo: add another item to replace it?
-					// 	console.log(path +' is not a folder');
-					// }
 				}
 			}
 
@@ -252,7 +221,7 @@ app.get('/api/meta/*', cache(ttl), (req, res) => {
 });
 
 // experimental random album picker
-app.get('/api/random/:num', (req, res) => {
+app.get('/api/random/albums/:num', (req, res) => {
 	const artists = shuffle(fs.readdirSync(MP3_PATH));
 	const result = [];
 
@@ -281,18 +250,42 @@ app.get('/api/random/:num', (req, res) => {
 	})();
 });
 
+app.get('/api/random/songs/:num', (req, res) => {
+	(async () => {
+		let files = [];
+		let playlist = [];
+
+		for await (const f of getMusicFiles(MP3_PATH)) {
+			files.push(f);
+		}
+
+		playlist = shuffle(files).slice(0, req.params.num);
+
+		for (let i=0; i<playlist.length; i++) {
+			const item = playlist[i].replace(MP3_PATH, '');
+			playlist[i] = item;
+		}
+
+		res.json({
+			path: '',
+			albums: [],
+			files: playlist
+		});
+	})();
+});
+
 app.listen(PORT, () => {
 	console.log(`Music Server running at ${PROTOCOL}://localhost:${PORT}`);
 	console.log(`MP3_PATH is ${MP3_PATH}`);
 });
 
-const shuffle = (array) => { 
-	for (let i = array.length - 1; i > 0; i--) { 
+const shuffle = (arr) => { 
+	for (let i = arr.length - 1; i > 0; i--) { 
 		const j = Math.floor(Math.random() * (i + 1)); 
-		[array[i], array[j]] = [array[j], array[i]]; 
+		[arr[i], arr[j]] = [arr[j], arr[i]]; 
 	}
 
-	return array; 
+	return arr; 
 }
 
 const getURL = (req, path) => {
@@ -342,11 +335,28 @@ const isFolder = (path) => {
 	const stats = fs.lstatSync(path);
 
 	return stats.isDirectory() ? true : false;
-};
+}
 
 const isMusicFile = (str) => {
 	const formats = ['.mp3', '.m4a'];
 	const extension = p.extname(str);
 
 	return extension && formats.includes(extension) ? true : false;
-};
+}
+
+async function* getMusicFiles(dir) {
+	const items = await fs.promises.readdir(dir, { withFileTypes: true });
+
+	for (const item of items) {
+		const res = p.resolve(dir, item.name);
+
+		if (item.isDirectory()) {
+			yield* getMusicFiles(res);
+
+		} else {
+			if (isMusicFile(item.name)) {
+				yield res;
+			}
+		}
+	}
+}
