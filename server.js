@@ -250,7 +250,7 @@ app.get('/api/random/albums/:num', (req, res) => {
 	})();
 });
 
-app.get('/api/random/songs/:num', (req, res) => {
+app.get('/api/random/tracks/:num', (req, res) => {
 	(async () => {
 		let files = [];
 		let playlist = [];
