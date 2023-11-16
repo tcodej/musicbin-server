@@ -4,6 +4,7 @@ import cors from 'cors';
 import fs from 'fs';
 import p from 'path';
 import mcache from 'memory-cache';
+import favicon from 'serve-favicon';
 import { parseFile } from 'music-metadata';
 
 const app = express();
@@ -43,16 +44,6 @@ app.use(cors({
 	origin: CORS_ORIGINS.split(',')
 }));
 
-app.get('/', (req, res) => {
-	res.send('Music Server v1.0');
-});
-
-// utility endpoint to aid in troubleshooting
-app.get('/api/clearcache', (req, res) => {
-	mcache.clear();
-	res.send('Cache cleared.');
-});
-
 // serve static mp3 files - required
 app.use('/api/mp3', express.static(MP3_PATH));
 
@@ -60,6 +51,18 @@ app.use('/api/mp3', express.static(MP3_PATH));
 if (CDG_PATH) {
 	app.use('/api/cdg', express.static(CDG_PATH));
 }
+
+app.use(favicon('./favicon.ico'));
+
+app.get('/', (req, res) => {
+	res.send('MusicBin Server v1.0');
+});
+
+// utility endpoint to aid in troubleshooting
+app.get('/api/clearcache', (req, res) => {
+	mcache.clear();
+	res.send('Cache cleared.');
+});
 
 app.get('/api/browse/*', cache(ttl), (req, res) => {
 	const pathReq = decodeURIComponent(req.params[0]);
