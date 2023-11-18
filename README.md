@@ -1,6 +1,6 @@
-# Music Server
+# MusicBin Server
 
-A simple Express app that serves up directory and file information to be used with a front-end UI to play my personal audio files.
+A simple Express app that serves up directory and file information to be used with a front-end UI to play my personal audio files. Works in tandem with the [musicbin-ui](https://github.com/tcodej/musicbin-ui) front end.
 
 Be sure to have nodemon installed globally for hot reloading.
 
