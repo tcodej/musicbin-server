@@ -21,7 +21,7 @@ const { MP3_PATH, CDG_PATH, CORS_ORIGINS, PROTOCOL, PORT } = process.env;
 
 const cache = (duration) => {
 	return (req, res, next) => {
-		const key = 'music-server-'+ req.originalUrl || req.url;
+		const key = 'musicbin-server-'+ req.originalUrl || req.url;
 		const cachedBody = mcache.get(key);
 
 		if (cachedBody && !disableCache) {
@@ -225,28 +225,34 @@ app.get('/api/meta/*', cache(ttl), (req, res) => {
 
 // experimental random album picker
 app.get('/api/random/albums/:num', (req, res) => {
+	// randomize artist folders
 	const artists = shuffle(fs.readdirSync(MP3_PATH));
 	const result = [];
 
 	(async () => {
-		for await (const artist of artists.slice(0, req.params.num)) {
+		for await (const artist of artists) {
+			// randomize album folders
 			const albumList = shuffle(fs.readdirSync(p.join(MP3_PATH, artist)));
+			// choose the first randomized album folder
 			const path = p.join(MP3_PATH, artist, albumList[0]);
 
 			if (isFolder(path)) {
+				// randomize files inside the folder
 				const fileList = shuffle(fs.readdirSync(path));
+				// get album meta based on file
 				const meta = await getMeta(p.join(artist, albumList[0], fileList[0]), true);
 
 				if (meta.ok) {
 					meta.path = p.join(artist, albumList[0]);
 					result.push(meta);
-				}
 
-			} else {
-				// sometimes this won't be a folder, so just skip it
-				// todo: add another item to replace it?
-				console.log(path +' is not a folder');
+					// stop iterating if we've reached our limit
+					if (result.length == req.params.num) {
+						break;
+					}
+				}
 			}
+
 		}
 
 		res.json({ num: req.params.num, result: result });
@@ -256,29 +262,21 @@ app.get('/api/random/albums/:num', (req, res) => {
 app.get('/api/random/tracks/:num', (req, res) => {
 	(async () => {
 		let files = [];
-		let playlist = [];
 
 		for await (const f of getMusicFiles(MP3_PATH)) {
-			files.push(f);
-		}
-
-		playlist = shuffle(files).slice(0, req.params.num);
-
-		for (let i=0; i<playlist.length; i++) {
-			const item = playlist[i].replace(MP3_PATH, '');
-			playlist[i] = item;
+			files.push(f.replace(MP3_PATH, ''));
 		}
 
 		res.json({
 			path: '',
 			albums: [],
-			files: playlist
+			files: shuffle(files).slice(0, req.params.num)
 		});
 	})();
 });
 
 app.listen(PORT, () => {
-	console.log(`Music Server running at ${PROTOCOL}://localhost:${PORT}`);
+	console.log(`MusicBin Server running at ${PROTOCOL}://localhost:${PORT}`);
 	console.log(`MP3_PATH is ${MP3_PATH}`);
 });
 
@@ -298,36 +296,49 @@ const getURL = (req, path) => {
 }
 
 const getMeta = async (pathReq, subset) => {
+	const filePath = p.join(MP3_PATH, pathReq);
+
 	try {
-		let { common } = await parseFile(p.join(MP3_PATH, pathReq));
+		if (isMusicFile(filePath)) {
+			let { common } = await parseFile(filePath);
 
-		if (common.picture && common.picture[0]) {
-			const picture = common.picture[0];
+			if (common.picture && common.picture[0]) {
+				const picture = common.picture[0];
 
-			common.image = `data:${picture.format};base64,${picture.data.toString('base64')}`;
-			delete common.picture;
+				common.image = `data:${picture.format};base64,${picture.data.toString('base64')}`;
+				delete common.picture;
+			}
+
+			if (subset === true) {
+				const albumMeta = {
+					artist: common.artist,
+					album: common.album,
+					year: common.year,
+					image: common.image,
+					genre: common.genre
+				};
+
+				// override the full common object
+				common = albumMeta;
+			}
+
+			common.ok = true;
+			return common;
+
+		} else {
+			console.log(filePath, 'not a valid music file');
+			return {
+				ok: false,
+				path: filePath,
+				error: 'Not a valid music file'
+			}
 		}
-
-		if (subset === true) {
-			const albumMeta = {
-				artist: common.artist,
-				album: common.album,
-				year: common.year,
-				image: common.image,
-				genre: common.genre
-			};
-
-			// override the full common object
-			common = albumMeta;
-		}
-
-		common.ok = true;
-		return common;
 
 	} catch (err) {
 		console.log(err);
 		return {
 			ok: false,
+			path: filePath,
 			error: err.message
 		};
 	}
@@ -347,6 +358,7 @@ const isMusicFile = (str) => {
 	return extension && formats.includes(extension) ? true : false;
 }
 
+// return the entire list of music files recursively from MP3_PATH
 async function* getMusicFiles(dir) {
 	const items = await fs.promises.readdir(dir, { withFileTypes: true });
 
